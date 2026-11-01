@@ -175,4 +175,5 @@ export interface ProviderStatus {
   models: string[];
   purpose: string;
   docsUrl: string;
+  freeTierHint?: string;
 }

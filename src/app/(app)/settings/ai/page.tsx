@@ -126,6 +126,11 @@ function ProviderCard({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[13.5px] font-medium text-parchment">{provider.label}</p>
+              {provider.freeTierHint && (
+                <Badge tone={provider.freeTierHint.includes("Gratis") ? "success" : "muted"}>
+                  {provider.freeTierHint.includes("Gratis") ? "Gratis" : "Berbayar"}
+                </Badge>
+              )}
               {provider.configured ? (
                 <Badge tone="success">
                   {provider.source === "env" ? "ENV" : "Tersimpan"}
@@ -138,6 +143,11 @@ function ProviderCard({
               )}
             </div>
             <p className="mt-1 text-[11.5px] text-muted">{provider.purpose}</p>
+            {provider.freeTierHint && (
+              <p className="mt-0.5 text-[10px] text-faint">
+                {provider.freeTierHint}
+              </p>
+            )}
           </div>
         </div>
         <a
@@ -379,14 +389,17 @@ export default function AiSettingsPage() {
           tidak bergantung pada sistem berkas.
         </p>
         <pre className="overflow-x-auto rounded-[4px] border border-line bg-[#0C0C10] p-3.5 text-[11px] leading-[1.8] text-[#C9BFAF]">
-{`OPENROUTER_API_KEY=sk-or-v1-...
-GEMINI_API_KEY=AIza...
+{`# Untuk tier gratis, gunakan Gemini sebagai primary:
+GEMINI_API_KEY=AIzaSy...
 GROQ_API_KEY=gsk_...
-AI_PRIMARY_PROVIDER=openrouter
-AI_FALLBACK_PROVIDER=gemini
-OPENROUTER_MODEL=openrouter/auto
+AI_PRIMARY_PROVIDER=gemini
+AI_FALLBACK_PROVIDER=none
 GEMINI_MODEL=gemini-2.5-flash
-GROQ_WHISPER_MODEL=whisper-large-v3`}
+GROQ_WHISPER_MODEL=whisper-large-v3
+
+# Jika punya kredit OpenRouter, aktifkan:
+# OPENROUTER_API_KEY=sk-or-v1-...
+# AI_FALLBACK_PROVIDER=openrouter`}
         </pre>
         <div className="mt-3 flex items-start gap-2">
           <Loader2 className="mt-[2px] h-3 w-3 shrink-0 text-faint" />

@@ -6,7 +6,7 @@ import { resolveKey, type ProviderId } from "./secrets";
 
 export const PROVIDER_META: Record<
   ProviderId,
-  { label: string; purpose: string; docsUrl: string; envName: string; defaultModel: string }
+  { label: string; purpose: string; docsUrl: string; envName: string; defaultModel: string; freeTierHint: string }
 > = {
   openrouter: {
     label: "OpenRouter",
@@ -14,6 +14,7 @@ export const PROVIDER_META: Record<
     docsUrl: "https://openrouter.ai/keys",
     envName: "OPENROUTER_API_KEY",
     defaultModel: process.env.OPENROUTER_MODEL ?? "openrouter/auto",
+    freeTierHint: "Berbayar — gunakan jika punya kredit.",
   },
   gemini: {
     label: "Google Gemini",
@@ -21,6 +22,7 @@ export const PROVIDER_META: Record<
     docsUrl: "https://aistudio.google.com/apikey",
     envName: "GEMINI_API_KEY",
     defaultModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+    freeTierHint: "Gratis — 15 RPM, 1 juta TPM, tanpa kartu kredit.",
   },
   groq: {
     label: "Groq Whisper",
@@ -28,6 +30,7 @@ export const PROVIDER_META: Record<
     docsUrl: "https://console.groq.com/keys",
     envName: "GROQ_API_KEY",
     defaultModel: process.env.GROQ_WHISPER_MODEL ?? "whisper-large-v3",
+    freeTierHint: "Gratis — 20 RPM, 28.800 detik audio/hari.",
   },
 };
 
@@ -58,6 +61,7 @@ export async function providerStatuses(): Promise<ProviderStatus[]> {
       models: AI_MODELS[id] ?? [],
       purpose: PROVIDER_META[id].purpose,
       docsUrl: PROVIDER_META[id].docsUrl,
+      freeTierHint: PROVIDER_META[id].freeTierHint,
     });
   }
 

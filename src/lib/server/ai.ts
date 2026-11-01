@@ -9,26 +9,32 @@ const GROQ_BASE = "https://api.groq.com/openai/v1";
 export class ProviderError extends Error {
   status: number;
   provider: string;
-  constructor(message: string, provider: string, status = 502) {
+  retryAfter?: number;
+  constructor(message: string, provider: string, status = 502, retryAfter?: number) {
     super(message);
     this.provider = provider;
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 }
 
-async function readError(res: Response): Promise<string> {
+async function readError(res: Response): Promise<{ message: string; retryAfter?: number }> {
   const text = await res.text().catch(() => "");
+  let retryAfter: number | undefined;
+  const ra = res.headers.get("retry-after");
+  if (ra) retryAfter = parseInt(ra, 10) || undefined;
   try {
     const json = JSON.parse(text);
-    return (
+    const msg = (
       json?.error?.message ??
       json?.error?.status ??
       json?.message ??
       text.slice(0, 300) ??
       `HTTP ${res.status}`
     );
+    return { message: msg, retryAfter };
   } catch {
-    return text.slice(0, 300) || `HTTP ${res.status}`;
+    return { message: text.slice(0, 300) || `HTTP ${res.status}`, retryAfter };
   }
 }
 
@@ -63,7 +69,7 @@ export async function openRouterComplete(opts: {
   });
 
   if (!res.ok) {
-    const detail = await readError(res);
+    const { message: detail, retryAfter } = await readError(res);
     throw new ProviderError(
       res.status === 401
         ? "Kunci OpenRouter ditolak. Periksa kembali API key Anda."
@@ -73,7 +79,8 @@ export async function openRouterComplete(opts: {
             ? "Batas permintaan OpenRouter tercapai. Coba lagi beberapa saat."
             : `OpenRouter gagal: ${detail}`,
       "openrouter",
-      res.status
+      res.status,
+      retryAfter
     );
   }
 
@@ -125,7 +132,7 @@ export async function geminiGenerate(opts: {
   });
 
   if (!res.ok) {
-    const detail = await readError(res);
+    const { message: detail, retryAfter } = await readError(res);
     throw new ProviderError(
       res.status === 400 && /API key not valid/i.test(detail)
         ? "Kunci Gemini tidak valid."
@@ -133,7 +140,8 @@ export async function geminiGenerate(opts: {
           ? "Kuota Gemini tercapai. Coba lagi nanti."
           : `Gemini gagal: ${detail}`,
       "gemini",
-      res.status
+      res.status,
+      retryAfter
     );
   }
 
@@ -162,7 +170,7 @@ export async function geminiGenerate(opts: {
   return text;
 }
 
-/* ————————————————— Unified completion ————————————————— */
+/* ————————————————— Unified completion with retry ————————————————— */
 
 export interface CompletionRequest {
   system: string;
@@ -171,30 +179,56 @@ export interface CompletionRequest {
   maxTokens: number;
 }
 
+const FREE_TIER_RETRIES = 2;
+const RETRY_BASE_MS = 1500;
+
 export async function completeWith(
   provider: ProviderId,
   key: string,
   model: string,
   req: CompletionRequest
 ): Promise<string> {
-  if (provider === "openrouter") {
-    return openRouterComplete({ key, model, ...req });
+  let lastError: ProviderError | null = null;
+
+  for (let attempt = 0; attempt <= FREE_TIER_RETRIES; attempt++) {
+    try {
+      if (provider === "openrouter") {
+        return await openRouterComplete({ key, model, ...req });
+      }
+      if (provider === "gemini") {
+        return await geminiGenerate({
+          key,
+          model,
+          system: req.system,
+          parts: [{ text: req.user }],
+          temperature: req.temperature,
+          maxTokens: req.maxTokens,
+        });
+      }
+      throw new ProviderError(
+        "Provider ini tidak mendukung penyelesaian teks.",
+        provider,
+        400
+      );
+    } catch (err) {
+      if (err instanceof ProviderError) {
+        lastError = err;
+        // Only retry on 429 (rate limit) or 503/504 (server temporarily unavailable)
+        if (err.status === 429 || err.status === 503 || err.status === 504) {
+          const delay = err.retryAfter
+            ? err.retryAfter * 1000
+            : RETRY_BASE_MS * Math.pow(2, attempt);
+          if (attempt < FREE_TIER_RETRIES) {
+            await new Promise((r) => setTimeout(r, Math.min(delay, 15000)));
+            continue;
+          }
+        }
+      }
+      throw err;
+    }
   }
-  if (provider === "gemini") {
-    return geminiGenerate({
-      key,
-      model,
-      system: req.system,
-      parts: [{ text: req.user }],
-      temperature: req.temperature,
-      maxTokens: req.maxTokens,
-    });
-  }
-  throw new ProviderError(
-    "Provider ini tidak mendukung penyelesaian teks.",
-    provider,
-    400
-  );
+
+  throw lastError ?? new ProviderError("Gagal setelah beberapa percobaan.", provider, 502);
 }
 
 /* ————————————————— Groq Whisper ————————————————— */
@@ -222,15 +256,18 @@ export async function groqTranscribe(opts: {
   });
 
   if (!res.ok) {
-    const detail = await readError(res);
+    const { message: detail, retryAfter } = await readError(res);
     throw new ProviderError(
       res.status === 401
         ? "Kunci Groq ditolak."
         : res.status === 413
           ? "Ukuran berkas melebihi batas Groq (25 MB)."
-          : `Groq gagal: ${detail}`,
+          : res.status === 429
+            ? "Batas permintaan Groq tercapai. Coba lagi nanti."
+            : `Groq gagal: ${detail}`,
       "groq",
-      res.status
+      res.status,
+      retryAfter
     );
   }
 
