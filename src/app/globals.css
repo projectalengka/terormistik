@@ -1,0 +1,418 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #0b0b0e;
+  --color-base: #101014;
+  --color-surface: #19191f;
+  --color-surface-2: #222229;
+  --color-surface-3: #2a2a32;
+  --color-accent: #a83232;
+  --color-accent-deep: #7f2323;
+  --color-accent-soft: #c04a4a;
+  --color-parchment: #e8dcc8;
+  --color-muted: #a69a8b;
+  --color-faint: #7d7466;
+  --color-line: #333039;
+  --color-line-strong: #46414f;
+
+  --font-serif: "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-read: "Lora", "Iowan Old Style", Georgia, "Times New Roman", serif;
+
+  --radius-card: 5px;
+
+  --animate-fade-up: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-drift: drift 14s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Page transitions must not use transform: a transformed ancestor becomes the
+   containing block for position:fixed, which would trap modals and sheets
+   underneath the bottom navigation. */
+@keyframes page-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.04);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(168, 50, 50, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 14px rgba(168, 50, 50, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(168, 50, 50, 0);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-parchment);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background: rgba(168, 50, 50, 0.34);
+    color: #fff5e6;
+  }
+
+  :focus-visible {
+    outline: 1px solid rgba(232, 220, 200, 0.55);
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-faint);
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #2b2831;
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #423d4a;
+    background-clip: content-box;
+  }
+}
+
+/* ————— Editorial helpers ————— */
+
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+.hairline {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(51, 48, 57, 0.9) 12%,
+    rgba(51, 48, 57, 0.9) 88%,
+    transparent
+  );
+}
+
+.display {
+  font-family: var(--font-serif);
+  font-weight: 300;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+}
+
+.card-surface {
+  background: linear-gradient(180deg, rgba(34, 34, 41, 0.55) 0%, rgba(25, 25, 31, 0.9) 100%);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+
+.glass {
+  background: rgba(16, 16, 20, 0.82);
+  backdrop-filter: blur(14px) saturate(120%);
+}
+
+.accent-glow {
+  box-shadow:
+    0 0 0 1px rgba(168, 50, 50, 0.28),
+    0 18px 48px -24px rgba(168, 50, 50, 0.55);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.text-pretty {
+  text-wrap: pretty;
+}
+
+/* ————— TipTap editor ————— */
+
+.tiptap {
+  outline: none;
+  font-family: var(--font-read);
+  font-size: 1.0625rem;
+  line-height: 1.9;
+  color: #ddd2bf;
+}
+
+.tiptap > * + * {
+  margin-top: 1.1em;
+}
+
+.tiptap h1 {
+  font-family: var(--font-serif);
+  font-size: 2.1rem;
+  line-height: 1.15;
+  color: var(--color-parchment);
+  margin-top: 1.8em;
+}
+
+.tiptap h2 {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  line-height: 1.25;
+  color: var(--color-parchment);
+  margin-top: 1.6em;
+}
+
+.tiptap h3 {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-top: 1.8em;
+}
+
+.tiptap blockquote {
+  border-left: 1px solid var(--color-accent);
+  padding-left: 1.15rem;
+  font-style: italic;
+  color: #cfc2ad;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.35rem;
+}
+
+.tiptap ul {
+  list-style: disc;
+}
+
+.tiptap ol {
+  list-style: decimal;
+}
+
+.tiptap li::marker {
+  color: var(--color-accent);
+}
+
+.tiptap a {
+  color: #d9b98f;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tiptap mark {
+  background: rgba(168, 50, 50, 0.3);
+  color: #f3e7d4;
+  padding: 0 2px;
+}
+
+.tiptap hr {
+  border: none;
+  height: 1px;
+  margin: 2.4em auto;
+  width: 42%;
+  background: linear-gradient(to right, transparent, var(--color-line-strong), transparent);
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-faint);
+  pointer-events: none;
+  height: 0;
+  font-style: italic;
+}
+
+.tiptap .scene-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  margin: 2.2em 0;
+  color: var(--color-accent);
+  letter-spacing: 0.4em;
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+/* ————— Reading mode ————— */
+
+.reader {
+  font-family: var(--font-read);
+  color: #ddd2bf;
+}
+
+.reader > * + * {
+  margin-top: 1.15em;
+}
+
+.reader h1,
+.reader h2,
+.reader h3 {
+  font-family: var(--font-serif);
+}
+
+.reader blockquote {
+  border-left: 1px solid var(--color-accent);
+  padding-left: 1.2rem;
+  font-style: italic;
+}
+
+.reader p {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.reader p + p,
+.reader div p + p {
+  margin-top: 1.05em;
+}
+
+.reader hr {
+  border: none;
+  height: 1px;
+  margin: 2.6em auto;
+  width: 30%;
+  background: var(--color-line-strong);
+}
+
+.theme-sepia.reader-surface {
+  background: #1c1915;
+  color: #e2d6c0;
+}
+
+/* Range input */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: var(--color-line-strong);
+  border-radius: 99px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 13px;
+  width: 13px;
+  border-radius: 50%;
+  background: var(--color-parchment);
+  cursor: pointer;
+  border: 2px solid var(--color-base);
+}
+
+input[type="range"]::-moz-range-thumb {
+  height: 13px;
+  width: 13px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-parchment);
+  cursor: pointer;
+}
+
+/* Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
