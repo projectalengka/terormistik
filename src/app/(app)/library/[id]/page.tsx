@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
+  Pencil,
   Settings2,
   Type,
   X,
@@ -198,6 +199,14 @@ export default function ReadingPage() {
           </p>
 
           <div className="flex items-center gap-0.5">
+            <Link
+              href={`/studio/${story.id}`}
+              aria-label="Edit cerita"
+              title="Edit cerita"
+              className="mr-1 flex h-8 items-center gap-1.5 rounded-[3px] border border-accent/40 bg-accent/10 px-2.5 text-[10.5px] font-medium uppercase tracking-[0.1em] text-accent transition-colors hover:bg-accent/20"
+            >
+              <Pencil className="h-3 w-3" /> <span className="hidden sm:inline">Edit</span>
+            </Link>
             <button
               onClick={() => setShowChapters((v) => !v)}
               aria-label="Daftar bab"

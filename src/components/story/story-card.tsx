@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Archive, BookOpen, MoreVertical, PencilLine, Star, Trash2 } from "lucide-react";
+import { Archive, BookOpen, MoreVertical, Pencil, PencilLine, Star, Trash2 } from "lucide-react";
 import type { Story } from "@/lib/types";
 import { cn, formatNumber, timeAgo, truncate } from "@/lib/utils";
 import { genreLabel, statusLabel } from "@/lib/constants";
@@ -98,7 +98,7 @@ export function StoryCard({
 }) {
   return (
     <div className={cn("group relative", className)}>
-      <Link href={`/studio/${story.id}`} className="block">
+      <Link href={`/library/${story.id}`} className="block">
         <div className="relative overflow-hidden rounded-[4px] border border-line transition-all duration-300 group-hover:border-line-strong group-hover:shadow-[0_24px_60px_-40px_rgba(0,0,0,0.9)]">
           <CoverArt
             title={story.title}
@@ -119,7 +119,7 @@ export function StoryCard({
 
       <div className="mt-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link href={`/studio/${story.id}`}>
+          <Link href={`/library/${story.id}`}>
             <h3 className="truncate font-serif text-[16px] leading-snug text-parchment transition-colors group-hover:text-white">
               {story.title}
             </h3>
@@ -144,6 +144,14 @@ export function StoryCard({
               <Star className="h-3.5 w-3.5" fill={story.is_favorite ? "currentColor" : "none"} />
             </button>
           )}
+          <Link
+            href={`/studio/${story.id}`}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Edit cerita"
+            className="flex h-7 w-7 items-center justify-center rounded-[3px] text-faint transition-colors hover:bg-white/[0.06] hover:text-parchment"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Link>
           {onArchive && onDelete && (
             <Menu story={story} onArchive={onArchive} onDelete={onDelete} />
           )}
@@ -164,7 +172,7 @@ export function StoryRow({
 }) {
   return (
     <div className="group flex items-center gap-4 border-b border-line/60 px-1 py-3.5 transition-colors last:border-b-0 hover:bg-white/[0.015]">
-      <Link href={`/studio/${story.id}`} className="shrink-0">
+      <Link href={`/library/${story.id}`} className="shrink-0">
         <CoverArt
           title={story.title}
           genre={story.genre}
@@ -174,7 +182,7 @@ export function StoryRow({
         />
       </Link>
       <div className="min-w-0 flex-1">
-        <Link href={`/studio/${story.id}`}>
+        <Link href={`/library/${story.id}`}>
           <h3 className="truncate font-serif text-[16px] text-parchment group-hover:text-white">
             {story.title}
           </h3>
@@ -203,6 +211,13 @@ export function StoryRow({
             <Star className="h-3.5 w-3.5" fill={story.is_favorite ? "currentColor" : "none"} />
           </button>
         )}
+        <Link
+          href={`/studio/${story.id}`}
+          aria-label="Edit cerita"
+          className="flex h-7 w-7 items-center justify-center rounded-[3px] text-faint transition-colors hover:bg-white/[0.06] hover:text-parchment"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Link>
         {onDelete && (
           <button
             onClick={onDelete}
