@@ -46,9 +46,13 @@ Pastikan `.env.local` dan `.data/` tidak ikut ter-commit (sudah ada di `.gitigno
 - **Batas durasi fungsi.** Route AI memakai `maxDuration = 120`, transkripsi dan video `300`.
   Pada paket Hobby, durasi maksimum 60 detik — transkripsi audio panjang atau video besar bisa
   terputus. Naikkan paket, atau jalankan di VPS.
-- **Batas body request.** Vercel membatasi body 4.5 MB untuk paket Hobby/Pro. Unggahan audio
-  hingga 25 MB dan video 120 MB **tidak akan lewat**. Untuk file besar, gunakan VPS/self-host,
-  atau ubah alur menjadi unggah langsung ke Supabase Storage lalu kirim path ke server.
+- **Unggahan media besar.** Vercel membatasi body request 4.5 MB. Karena itu, saat Supabase aktif,
+  peramban mengunggah audio/video **langsung ke Supabase Storage** (resumable/TUS), lalu server
+  hanya menerima `storagePath`. Berkas 25 MB dan video 120 MB tidak melewati Vercel sama sekali.
+  Di Mode Lokal (tanpa Supabase), jalur multipart lama tetap dipakai dan tetap terkena batas 4.5 MB
+  — mode itu memang untuk pemakaian di mesin sendiri.
+- **Memori fungsi.** Video besar diunduh ke memori sebelum dikirim ke Gemini File API. Untuk video
+  di atas ±100 MB, gunakan VPS dengan RAM memadai.
 
 ### 4. Domain & keamanan
 

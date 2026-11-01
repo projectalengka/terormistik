@@ -14,7 +14,7 @@ import type {
 } from "../types";
 import { emptyDoc, nowIso, safeFileName, uid } from "../utils";
 import type { Repository, UploadResult } from "./repository";
-import { getSupabaseBrowserClient } from "../supabase/client";
+import { getSupabaseBrowserClient, SUPABASE_URL } from "../supabase/client";
 
 const BUCKET = "media";
 
@@ -303,15 +303,73 @@ export class SupabaseRepository implements Repository {
     if (error) throw new Error(error.message);
   }
 
-  async uploadMedia(file: File, kind: "audio" | "video" | "cover"): Promise<UploadResult> {
+  async uploadMedia(
+    file: File,
+    kind: "audio" | "video" | "cover",
+    onProgress?: (percent: number) => void
+  ): Promise<UploadResult> {
     const path = `${this.ownerId}/${kind}/${Date.now()}-${safeFileName(file.name)}`;
-    const { error } = await this.client.storage.from(BUCKET).upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: file.type || undefined,
+    const contentType = file.type || "application/octet-stream";
+
+    // Supabase's standard upload endpoint caps at 6 MB. Anything larger goes
+    // through the resumable (TUS) endpoint so 25 MB audio and long videos work.
+    if (file.size > 5 * 1024 * 1024) {
+      await this.uploadResumable(file, path, contentType, onProgress);
+    } else {
+      const { error } = await this.client.storage.from(BUCKET).upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType,
+      });
+      if (error) throw new Error(error.message);
+      onProgress?.(100);
+    }
+
+    return { path, size: file.size, mime: contentType };
+  }
+
+  private async uploadResumable(
+    file: File,
+    path: string,
+    contentType: string,
+    onProgress?: (percent: number) => void
+  ): Promise<void> {
+    const { data } = await this.client.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Sesi berakhir. Masuk kembali untuk mengunggah berkas.");
+
+    const tus = await import("tus-js-client");
+
+    await new Promise<void>((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+        retryDelays: [0, 3000, 6000, 12000, 24000],
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-upsert": "true",
+        },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        chunkSize: 6 * 1024 * 1024,
+        metadata: {
+          bucketName: BUCKET,
+          objectName: path,
+          contentType,
+          cacheControl: "3600",
+        },
+        onProgress: (sent, total) => {
+          if (total > 0) onProgress?.(Math.round((sent / total) * 100));
+        },
+        onError: (error) => {
+          const message =
+            error instanceof Error ? error.message : "Unggahan gagal di tengah jalan.";
+          reject(new Error(`Unggahan gagal: ${message}`));
+        },
+        onSuccess: () => resolve(),
+      });
+
+      upload.start();
     });
-    if (error) throw new Error(error.message);
-    return { path, size: file.size, mime: file.type };
   }
 
   async getMediaUrl(item: {

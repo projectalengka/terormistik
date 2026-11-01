@@ -4,6 +4,8 @@ import { geminiGenerate, uploadGeminiFile } from "@/lib/server/ai";
 import { resolveKey } from "@/lib/server/secrets";
 import { resolveModel } from "@/lib/server/registry";
 import { parseStructured, VIDEO_PROMPT, VIDEO_SYSTEM } from "@/lib/server/prompts";
+import { downloadMediaObject } from "@/lib/server/storage";
+import { isSupabaseServerConfigured } from "@/lib/supabase/server";
 import { MAX_VIDEO_BYTES } from "@/lib/constants";
 
 export const runtime = "nodejs";
@@ -60,69 +62,100 @@ export async function POST(req: Request) {
       part = { file_data: { file_uri: uploaded.uri, mime_type: file.type } };
       sourceLabel = file.name;
     } else {
-      const body = (await req.json().catch(() => null)) as { url?: string; model?: string } | null;
-      const url = body?.url?.trim();
-      if (!url) return jsonError("Masukkan URL video publik.", 400);
-      if (!/^https?:\/\//i.test(url)) return jsonError("URL harus dimulai dengan http:// atau https://.", 400);
+      const body = (await req.json().catch(() => null)) as {
+        url?: string;
+        storagePath?: string;
+        model?: string;
+      } | null;
       if (body?.model) model = body.model;
 
-      if (isYouTube(url)) {
-        part = { file_data: { file_uri: url } };
-        sourceLabel = url;
+      if (body?.storagePath) {
+        // Direct-to-storage flow: file already sits in the owner's folder.
+        if (!isSupabaseServerConfigured()) {
+          return jsonError("Unggahan langsung memerlukan Supabase.", 400);
+        }
+
+        const stored = await downloadMediaObject(body.storagePath);
+        if (stored.size === 0) return jsonError("Berkas video kosong.", 400);
+        if (stored.size > MAX_VIDEO_BYTES) {
+          return jsonError(
+            `Ukuran video melebihi ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
+            413
+          );
+        }
+        if (!stored.type.startsWith("video/")) {
+          return jsonError(`Format tidak didukung (${stored.type || "tidak diketahui"}).`, 415);
+        }
+
+        const buffer = Buffer.from(await stored.arrayBuffer());
+        const uploaded = await uploadGeminiFile(key, buffer, stored.type, stored.name);
+        part = { file_data: { file_uri: uploaded.uri, mime_type: stored.type } };
+        sourceLabel = stored.name;
       } else {
-        const res = await fetch(url, {
-          redirect: "follow",
-          signal: AbortSignal.timeout(120_000),
-          headers: { "User-Agent": "TEROR-MISTIK/1.0 (+personal archive)" },
-        }).catch(() => null);
-
-        if (!res || !res.ok) {
-          return jsonError(
-            `URL video tidak dapat diakses${res ? ` (HTTP ${res.status})` : ""}. Pastikan tautan publik dan masih aktif.`,
-            422
-          );
+        const url = body?.url?.trim();
+        if (!url) return jsonError("Masukkan URL video publik.", 400);
+        if (!/^https?:\/\//i.test(url)) {
+          return jsonError("URL harus dimulai dengan http:// atau https://.", 400);
         }
 
-        const declaredLength = Number(res.headers.get("content-length") ?? "0");
-        if (declaredLength > MAX_VIDEO_BYTES) {
-          return jsonError(
-            `Video melebihi ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
-            413
+        if (isYouTube(url)) {
+          part = { file_data: { file_uri: url } };
+          sourceLabel = url;
+        } else {
+          const res = await fetch(url, {
+            redirect: "follow",
+            signal: AbortSignal.timeout(120_000),
+            headers: { "User-Agent": "TEROR-MISTIK/1.0 (+personal archive)" },
+          }).catch(() => null);
+
+          if (!res || !res.ok) {
+            return jsonError(
+              `URL video tidak dapat diakses${res ? ` (HTTP ${res.status})` : ""}. Pastikan tautan publik dan masih aktif.`,
+              422
+            );
+          }
+
+          const declaredLength = Number(res.headers.get("content-length") ?? "0");
+          if (declaredLength > MAX_VIDEO_BYTES) {
+            return jsonError(
+              `Video melebihi ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
+              413
+            );
+          }
+
+          const buffer = Buffer.from(await res.arrayBuffer());
+          if (buffer.byteLength > MAX_VIDEO_BYTES) {
+            return jsonError(
+              `Video melebihi ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
+              413
+            );
+          }
+
+          const mime =
+            res.headers.get("content-type")?.split(";")[0]?.trim() ||
+            (url.endsWith(".mp4") ? "video/mp4" : "video/mp4");
+
+          if (!mime.startsWith("video/") && !mime.startsWith("application/octet-stream")) {
+            return jsonError(
+              `Tautan tidak mengarah ke berkas video (content-type: ${mime}). Gunakan tautan langsung ke berkas video.`,
+              415
+            );
+          }
+
+          const uploaded = await uploadGeminiFile(
+            key,
+            buffer,
+            mime.startsWith("video/") ? mime : "video/mp4",
+            url.split("/").pop()?.slice(0, 80) || "video"
           );
+          part = {
+            file_data: {
+              file_uri: uploaded.uri,
+              mime_type: mime.startsWith("video/") ? mime : "video/mp4",
+            },
+          };
+          sourceLabel = url;
         }
-
-        const buffer = Buffer.from(await res.arrayBuffer());
-        if (buffer.byteLength > MAX_VIDEO_BYTES) {
-          return jsonError(
-            `Video melebihi ${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)} MB.`,
-            413
-          );
-        }
-
-        const mime =
-          res.headers.get("content-type")?.split(";")[0]?.trim() ||
-          (url.endsWith(".mp4") ? "video/mp4" : "video/mp4");
-
-        if (!mime.startsWith("video/") && !mime.startsWith("application/octet-stream")) {
-          return jsonError(
-            `Tautan tidak mengarah ke berkas video (content-type: ${mime}). Gunakan tautan langsung ke berkas video.`,
-            415
-          );
-        }
-
-        const uploaded = await uploadGeminiFile(
-          key,
-          buffer,
-          mime.startsWith("video/") ? mime : "video/mp4",
-          url.split("/").pop()?.slice(0, 80) || "video"
-        );
-        part = {
-          file_data: {
-            file_uri: uploaded.uri,
-            mime_type: mime.startsWith("video/") ? mime : "video/mp4",
-          },
-        };
-        sourceLabel = url;
       }
     }
 

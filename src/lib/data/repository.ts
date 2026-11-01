@@ -53,7 +53,11 @@ export interface Repository {
   createMedia(input: Partial<MediaSource> & { file_name: string }): Promise<MediaSource>;
   updateMedia(id: string, patch: Partial<MediaSource>): Promise<MediaSource>;
   deleteMedia(id: string): Promise<void>;
-  uploadMedia(file: File, kind: "audio" | "video" | "cover"): Promise<UploadResult>;
+  uploadMedia(
+    file: File,
+    kind: "audio" | "video" | "cover",
+    onProgress?: (percent: number) => void
+  ): Promise<UploadResult>;
   getMediaUrl(item: Pick<MediaSource, "storage_path" | "source_url">): Promise<string | null>;
   deleteMediaFile(path: string): Promise<void>;
 

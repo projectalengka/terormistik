@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
-import { useRepo } from "@/components/providers/data-provider";
+import { useRepo, useData } from "@/components/providers/data-provider";
 import { useToast } from "@/components/ui/toast";
 import { useProviders } from "@/lib/use-providers";
 import { convertNoteToStory } from "@/lib/note-actions";
@@ -61,6 +61,7 @@ function uploadWithProgress(
 
 export function AudioPanel({ onSaved }: { onSaved: () => void }) {
   const repo = useRepo();
+  const { mode } = useData();
   const router = useRouter();
   const toast = useToast();
   const { providers } = useProviders();
@@ -130,12 +131,33 @@ export function AudioPanel({ onSaved }: { onSaved: () => void }) {
       });
       setMedia(created);
 
-      const form = new FormData();
-      form.append("file", file);
-      form.append("provider", provider);
-      form.append("language", language);
+      let result: { ok: boolean; status: number; json: Record<string, unknown> };
+      let storagePath: string | null = null;
 
-      const result = await uploadWithProgress(form, setProgress);
+      if (mode === "supabase") {
+        // Browser → Supabase Storage directly (resumable). Vercel's 4.5 MB
+        // request limit never applies because the file never passes through it.
+        const upload = await repo.uploadMedia(file, "audio", setProgress);
+        storagePath = upload.path;
+        setProgress(100);
+
+        const res = await fetch("/api/transcribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ storagePath, provider, language }),
+        });
+        result = {
+          ok: res.ok,
+          status: res.status,
+          json: (await res.json().catch(() => ({}))) as Record<string, unknown>,
+        };
+      } else {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("provider", provider);
+        form.append("language", language);
+        result = await uploadWithProgress(form, setProgress);
+      }
 
       if (!result.ok) {
         const message = String(result.json.error ?? "Transkripsi gagal.");
@@ -157,18 +179,21 @@ export function AudioPanel({ onSaved }: { onSaved: () => void }) {
         transcript_status: "done",
         provider: String(result.json.provider ?? provider),
         duration_seconds: detectedDuration,
+        ...(storagePath ? { storage_path: storagePath } : {}),
       });
       setMedia(updated);
       setPhase("done");
       toast.success("Transkripsi selesai.");
 
-      // Archive the binary in the background so the transcript is never lost.
-      try {
-        const upload = await repo.uploadMedia(file, "audio");
-        const withPath = await repo.updateMedia(created.id, { storage_path: upload.path });
-        setMedia(withPath);
-      } catch {
-        toast.info("Transkrip tersimpan, tetapi berkas audio gagal diarsipkan.");
+      if (mode === "local") {
+        // Archive the binary locally so the transcript is never orphaned.
+        try {
+          const upload = await repo.uploadMedia(file, "audio");
+          const withPath = await repo.updateMedia(created.id, { storage_path: upload.path });
+          setMedia(withPath);
+        } catch {
+          toast.info("Transkrip tersimpan, tetapi berkas audio gagal diarsipkan.");
+        }
       }
       onSaved();
     } catch (err) {

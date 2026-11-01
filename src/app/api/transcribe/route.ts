@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { clientIp, jsonError, rateLimit, requireOwner } from "@/lib/server/guard";
 import { geminiGenerate, groqTranscribe, uploadGeminiFile } from "@/lib/server/ai";
 import { resolveKey, type ProviderId } from "@/lib/server/secrets";
 import { resolveModel } from "@/lib/server/registry";
+import { isSupabaseServerConfigured } from "@/lib/supabase/server";
+import { downloadMediaObject } from "@/lib/server/storage";
 import { MAX_AUDIO_BYTES } from "@/lib/constants";
 
 export const runtime = "nodejs";
@@ -25,6 +28,14 @@ const AUDIO_MIME = [
   "video/mp4",
 ];
 
+const jsonSchema = z.object({
+  storagePath: z.string().min(3).max(600),
+  provider: z.enum(["groq", "gemini"]).optional(),
+  language: z.string().max(10).optional(),
+  model: z.string().max(120).optional(),
+  prompt: z.string().max(1000).optional(),
+});
+
 export async function POST(req: Request) {
   const guard = await requireOwner();
   if (!guard.ok) return guard.response;
@@ -36,15 +47,54 @@ export async function POST(req: Request) {
     });
   }
 
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    return jsonError("Berkas tidak terbaca. Unggah ulang berkas audio Anda.", 400);
-  }
+  const contentType = req.headers.get("content-type") ?? "";
 
-  const file = form.get("file");
-  if (!(file instanceof File)) return jsonError("Tidak ada berkas audio yang dikirim.", 400);
+  let file: File;
+  let providerHint: ProviderId = "groq";
+  let language = "id";
+  let modelHint: string | undefined;
+  let promptHint: string | undefined;
+
+  try {
+    if (contentType.includes("application/json")) {
+      // Direct-to-storage flow: the browser uploaded the file to Supabase Storage,
+      // so the request body stays tiny and Vercel's 4.5 MB limit never applies.
+      if (!isSupabaseServerConfigured()) {
+        return jsonError(
+          "Unggahan langsung memerlukan Supabase. Gunakan unggahan berkas biasa.",
+          400
+        );
+      }
+
+      const parsed = jsonSchema.safeParse(await req.json().catch(() => null));
+      if (!parsed.success) return jsonError("Permintaan tidak valid.", 400);
+
+      providerHint = parsed.data.provider === "gemini" ? "gemini" : "groq";
+      language = parsed.data.language ?? "id";
+      modelHint = parsed.data.model;
+      promptHint = parsed.data.prompt;
+
+      file = await downloadMediaObject(parsed.data.storagePath);
+    } else {
+      const form = await req.formData().catch(() => null);
+      if (!form) return jsonError("Berkas tidak terbaca. Unggah ulang berkas audio Anda.", 400);
+
+      const uploaded = form.get("file");
+      if (!(uploaded instanceof File)) return jsonError("Tidak ada berkas audio yang dikirim.", 400);
+
+      file = uploaded;
+      const hint = String(form.get("provider") ?? "groq");
+      providerHint = hint === "gemini" ? "gemini" : "groq";
+      language = String(form.get("language") ?? "id");
+      modelHint = form.get("model") ? String(form.get("model")) : undefined;
+      promptHint = form.get("prompt") ? String(form.get("prompt")) : undefined;
+    }
+  } catch (err) {
+    return jsonError(
+      err instanceof Error ? err.message : "Berkas tidak dapat dibaca.",
+      400
+    );
+  }
 
   if (file.size === 0) return jsonError("Berkas kosong.", 400);
   if (file.size > MAX_AUDIO_BYTES) {
@@ -55,17 +105,16 @@ export async function POST(req: Request) {
   }
 
   const mime = file.type || "application/octet-stream";
-  const looksAudio = AUDIO_MIME.includes(mime) || mime.startsWith("audio/") || mime.startsWith("video/");
+  const looksAudio =
+    AUDIO_MIME.includes(mime) || mime.startsWith("audio/") || mime.startsWith("video/");
   if (!looksAudio) {
-    return jsonError(`Format berkas tidak didukung (${mime}). Gunakan MP3, WAV, M4A, atau WebM.`, 415);
+    return jsonError(
+      `Format berkas tidak didukung (${mime}). Gunakan MP3, WAV, M4A, atau WebM.`,
+      415
+    );
   }
 
-  const language = String(form.get("language") ?? "id");
-  const providerHint = String(form.get("provider") ?? "groq") as ProviderId;
-  const modelHint = form.get("model") ? String(form.get("model")) : undefined;
-  const promptHint = form.get("prompt") ? String(form.get("prompt")) : undefined;
-
-  const provider: ProviderId = providerHint === "gemini" ? "gemini" : "groq";
+  const provider: ProviderId = providerHint;
   const { key, source } = await resolveKey(provider);
 
   if (!key) {

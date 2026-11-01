@@ -256,10 +256,15 @@ export class LocalRepository implements Repository {
     await idbDelete("media", id);
   }
 
-  async uploadMedia(file: File, kind: "audio" | "video" | "cover"): Promise<UploadResult> {
+  async uploadMedia(
+    file: File,
+    kind: "audio" | "video" | "cover",
+    onProgress?: (percent: number) => void
+  ): Promise<UploadResult> {
     const id = uid();
     const path = `local/${kind}/${id}-${file.name}`;
     await idbPut("blobs", { id: path, blob: file, mime: file.type, name: file.name });
+    onProgress?.(100);
     return { path, size: file.size, mime: file.type };
   }
 

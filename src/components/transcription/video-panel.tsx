@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
-import { useRepo } from "@/components/providers/data-provider";
+import { useRepo, useData } from "@/components/providers/data-provider";
 import { useToast } from "@/components/ui/toast";
 import { useProviders } from "@/lib/use-providers";
 import { convertNoteToStory } from "@/lib/note-actions";
@@ -26,6 +26,7 @@ type Phase = "idle" | "working" | "done" | "error";
 
 export function VideoPanel({ onSaved }: { onSaved: () => void }) {
   const repo = useRepo();
+  const { mode: dataMode } = useData();
   const router = useRouter();
   const toast = useToast();
   const { providers } = useProviders();
@@ -42,6 +43,7 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
   const [media, setMedia] = React.useState<MediaSource | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [dragging, setDragging] = React.useState(false);
+  const [uploadPct, setUploadPct] = React.useState<number | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   async function analyze() {
@@ -49,6 +51,7 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
     setOutput("");
     setSummary("");
     setKeyPoints([]);
+    setUploadPct(null);
     setPhase("working");
 
     try {
@@ -76,9 +79,22 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
           setPhase("error");
           return;
         }
-        const form = new FormData();
-        form.append("file", file);
-        response = await fetch("/api/video", { method: "POST", body: form });
+
+        if (dataMode === "supabase") {
+          // Direct-to-storage: keeps the request body tiny on Vercel.
+          setUploadPct(0);
+          const upload = await repo.uploadMedia(file, "video", setUploadPct);
+          setUploadPct(100);
+          response = await fetch("/api/video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storagePath: upload.path }),
+          });
+        } else {
+          const form = new FormData();
+          form.append("file", file);
+          response = await fetch("/api/video", { method: "POST", body: form });
+        }
       }
 
       const json = await response.json();
@@ -88,6 +104,7 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
         return;
       }
 
+      setUploadPct(null);
       setOutput(json.output ?? "");
       setSummary(json.summary ?? "");
       setKeyPoints(Array.isArray(json.keyPoints) ? json.keyPoints : []);
@@ -108,6 +125,7 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
       setMedia(created);
       onSaved();
     } catch (err) {
+      setUploadPct(null);
       setError(err instanceof Error ? err.message : "Analisis video gagal.");
       setPhase("error");
     }
@@ -249,14 +267,30 @@ export function VideoPanel({ onSaved }: { onSaved: () => void }) {
       </div>
 
       {phase === "working" && (
-        <div className="flex items-center gap-3 rounded-[4px] border border-line bg-[#111116] px-4 py-4">
-          <Loader2 className="h-4 w-4 animate-spin text-accent-soft" />
-          <div>
-            <p className="text-[12px] text-parchment">Memproses video…</p>
-            <p className="mt-0.5 text-[10.5px] text-faint">
-              Mengunggah, menonton, lalu menyusun bahan cerita. Ini bisa memakan waktu beberapa menit.
-            </p>
+        <div className="rounded-[4px] border border-line bg-[#111116] px-4 py-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-accent-soft" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] text-parchment">
+                {uploadPct !== null && uploadPct < 100
+                  ? `Mengunggah video… ${uploadPct}%`
+                  : "Memproses video…"}
+              </p>
+              <p className="mt-0.5 text-[10.5px] text-faint">
+                {uploadPct !== null && uploadPct < 100
+                  ? "Berkas dikirim langsung ke penyimpanan, tidak melewati batas server."
+                  : "Menonton, lalu menyusun bahan cerita. Ini bisa memakan waktu beberapa menit."}
+              </p>
+            </div>
           </div>
+          {uploadPct !== null && uploadPct < 100 && (
+            <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className="h-full bg-accent transition-[width] duration-300"
+                style={{ width: `${uploadPct}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 

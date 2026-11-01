@@ -271,6 +271,9 @@ npm run typecheck  # pemeriksaan TypeScript
   internet. Fallback ke perekaman + transkripsi disediakan.
 - **Video YouTube** diproses langsung oleh Gemini; video dari tautan lain diunduh server lebih
   dahulu, sehingga tautan harus publik dan berkasnya dapat diakses.
+- **Unggahan media di Vercel.** Saat Supabase aktif, audio/video dikirim peramban langsung ke
+  Supabase Storage (resumable/TUS), jadi batas body 4.5 MB Vercel tidak berlaku. Di Mode Lokal,
+  unggahan tetap melewati server dan tunduk pada batas tersebut.
 - **Kunci yang disimpan lewat UI** memerlukan sistem berkas yang dapat ditulis. Di Vercel
   (filesystem read-only), gunakan environment variable.
 - **Mode lokal** terikat pada satu peramban. Ekspor backup sebelum berpindah perangkat.
